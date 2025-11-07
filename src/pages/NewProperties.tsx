@@ -1,0 +1,994 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import MainLayout from "@/components/layout/MainLayout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Building2,
+  Search,
+  MapPin,
+  Calendar,
+  Check,
+  Plus,
+  Pencil,
+  Trash2,
+  Download,
+  Share2,
+  X,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Building } from "@/types/building";
+import { BuildingDialog } from "@/components/properties/BuildingDialog";
+import { DeleteConfirmDialog } from "@/components/properties/DeleteConfirmDialog";
+import { toast } from "sonner";
+import axios from "axios";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import Loader from "@/components/Loader";
+import { OpenPlot } from "@/types/OpenPlots";
+import { OpenPlotDialog } from "@/components/properties/OpenPlotsDialog";
+import { getStatusBadge } from "@/components/properties/OpenPlotDetails";
+import { OpenPlotCardDetailed } from "@/components/properties/OpenCardDetailed";
+import { OpenPlotDetails } from "@/components/properties/OpenPlotDetails";
+import {
+  getAllBuildings,
+  getAllOpenLand,
+  getAllOpenPlots,
+} from "@/utils/buildings/Projects";
+import { OpenLand } from "@/types/OpenLand";
+import { OpenLandDialog } from "@/components/properties/OpenLandDialog";
+import OpenLandProperties from "./OpenLandProperties";
+import { useRBAC } from "@/config/RBAC";
+// import OpenLandDialog from "@/components/properties/OpenLandDialog";
+
+const NewProperties = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const [filteredBuildings, setFilteredBuildings] = useState<Building[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [buildingDialogOpen, setBuildingDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(
+    null
+  );
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [buildingToDelete, setBuildingToDelete] = useState<string | null>(null);
+
+  const [dialogOpenPlot, setDialogOpenPlot] = useState(false);
+  const [openPlotSubmitting, setOpenPlotSubmitting] = useState(false);
+  const [currentOpenPlot, setCurrentOpenPlot] = useState<OpenPlot | undefined>(
+    undefined
+  );
+  const [selectedOpenPlot, setSelectedOpenPlot] = useState<OpenPlot | null>(
+    null
+  );
+
+  const [openLandDialog, setopenLandDialog] = useState(false);
+  const [openLandSubmitting, setOpenLandSubmitting] = useState(false);
+  const [currentOpenLand, setCurrentOpenLand] = useState<OpenLand | undefined>(
+    undefined
+  );
+  const [selectedOpenLand, setSelectedOpenLand] = useState<OpenLand | null>(
+    null
+  );
+
+  const {
+    data: buildings,
+    isLoading: buildingsLoading,
+    isError: buildError,
+    error: buildErr,
+  } = useQuery<Building[]>({
+    queryKey: ["buildings"],
+    queryFn: getAllBuildings,
+    staleTime: 600000,
+    placeholderData: keepPreviousData,
+  });
+
+  const {
+    data: openPlots,
+    isLoading: openPlotsLoading,
+    isError: openPlotsError,
+    error: openPlotsErr,
+  } = useQuery<OpenPlot[]>({
+    queryKey: ["openPlots"],
+    queryFn: getAllOpenPlots,
+    staleTime: 600000,
+    placeholderData: keepPreviousData,
+  });
+  const {
+    data: openLandData,
+    isLoading: openLandLoading,
+    isError: openLandError,
+    error: openLandErr,
+  } = useQuery<OpenLand[]>({
+    queryKey: ["openLand"],
+    queryFn: getAllOpenLand,
+    staleTime: 600000,
+    placeholderData: keepPreviousData,
+  });
+
+  const {
+    isRolePermissionsLoading,
+    userCanAddUser,
+    userCanDeleteUser,
+    userCanEditUser,
+  } = useRBAC({ roleSubmodule: "Properties" });
+
+  const deleteBuilding = useMutation({
+    mutationFn: async (id: string) => {
+      await axios.delete(
+        `${import.meta.env.VITE_URL}/api/building/deleteBuilding/${id}`,
+        {
+          withCredentials: true,
+        }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["buildings"] });
+      toast.success("Building deleted successfully");
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || "Failed to delete building");
+    },
+  });
+
+  const createOpenPlotMutation = useMutation({
+    mutationFn: async (payload: Partial<OpenPlot>) => {
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_URL}/api/openPlot/saveOpenPlot`,
+        payload,
+        { withCredentials: true }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Open plot created");
+      queryClient.invalidateQueries({ queryKey: ["openPlots"] });
+      setDialogOpenPlot(false);
+      setCurrentOpenPlot(undefined);
+    },
+    onError: (err: any) => {
+      console.error("createOpenPlot error:", err?.response || err);
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          toast.error(
+            err.response?.data?.message || "Conflict while creating open plot"
+          );
+        } else {
+          toast.error(
+            err.response?.data?.message || "Failed to create open plot"
+          );
+        }
+      } else {
+        toast.error("Failed to create open plot");
+      }
+    },
+  });
+
+  const updateOpenPlotMutation = useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<OpenPlot>;
+    }) => {
+      const { data } = await axios.put(
+        `${import.meta.env.VITE_URL}/api/openPlot/updateOpenPlot/${id}`,
+        payload,
+        { withCredentials: true }
+      );
+      return data;
+    },
+    onSuccess: (updatedData) => {
+      toast.success("Open plot updated");
+      setDialogOpenPlot(false);
+      setCurrentOpenPlot(undefined);
+      queryClient.invalidateQueries({ queryKey: ["openPlots"] });
+      if (updatedData?.data) setSelectedOpenPlot(updatedData.data);
+    },
+    onError: (err: any) => {
+      console.error("updateOpenPlot error:", err?.response || err);
+      if (axios.isAxiosError(err)) {
+        toast.error(
+          err.response?.data?.message || "Failed to update open plot"
+        );
+      } else {
+        toast.error("Failed to update open plot");
+      }
+    },
+  });
+
+  const deleteOpenPlotMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentOpenPlot) return;
+      await axios.delete(
+        `${import.meta.env.VITE_URL}/api/openPlot/deleteOpenPlot/${
+          currentOpenPlot._id
+        }`,
+        {
+          withCredentials: true,
+        }
+      );
+    },
+    onSuccess: () => {
+      toast.success("Open plot deleted");
+      queryClient.invalidateQueries({ queryKey: ["openPlots"] });
+    },
+    onError: (err: any) => {
+      console.error("deleteOpenPlot error:", err?.response || err);
+      toast.error(err?.response?.data?.message || "Failed to delete open plot");
+    },
+  });
+  const createOpenLandMutation = useMutation({
+    mutationFn: async (payload: Partial<OpenLand>) => {
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_URL}/api/openLand/saveOpenLand`,
+        payload,
+        { withCredentials: true }
+      );
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Open land created");
+      queryClient.invalidateQueries({ queryKey: ["openLand"] });
+      setopenLandDialog(false);
+      setCurrentOpenLand(undefined);
+    },
+    onError: (err: any) => {
+      console.error("createOpenLand error:", err?.response || err);
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 409) {
+          toast.error(
+            err.response?.data?.message || "Conflict while creating open land"
+          );
+        } else {
+          toast.error(
+            err.response?.data?.message || "Failed to create open land"
+          );
+        }
+      } else {
+        toast.error("Failed to create open land");
+      }
+    },
+  });
+  const updateOpenLandMutation = useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Partial<OpenLand>;
+    }) => {
+      const { data } = await axios.put(
+        `${import.meta.env.VITE_URL}/api/openLand/updateOpenLand/${id}`,
+        payload,
+        { withCredentials: true }
+      );
+      return data;
+    },
+    onSuccess: (updatedData) => {
+      toast.success("Open land updated");
+      setopenLandDialog(false);
+      setCurrentOpenLand(undefined);
+      queryClient.invalidateQueries({ queryKey: ["openLand"] });
+      if (updatedData?.data) setSelectedOpenLand(updatedData.data);
+    },
+    onError: (err: any) => {
+      console.error("updateOpenLand error:", err?.response || err);
+      if (axios.isAxiosError(err)) {
+        toast.error(
+          err.response?.data?.message || "Failed to update open land"
+        );
+      } else {
+        toast.error("Failed to update open land");
+      }
+    },
+  });
+  const deleteOpenLandMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentOpenLand) return;
+      await axios.delete(
+        `${import.meta.env.VITE_URL}/api/openLand/deleteOpenLand/${
+          currentOpenLand._id
+        }`,
+        {
+          withCredentials: true,
+        }
+      );
+    },
+    onSuccess: () => {
+      toast.success("Open land deleted");
+      queryClient.invalidateQueries({ queryKey: ["openLand"] });
+    },
+    onError: (err: any) => {
+      console.error("deleteOpenLand error:", err?.response || err);
+      toast.error(err?.response?.data?.message || "Failed to delete open land");
+    },
+  });
+
+  useEffect(() => {
+    let results = (buildings || []).slice();
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      results = results.filter(
+        (b) =>
+          (b.projectName || "").toLowerCase().includes(lower) ||
+          (b.location || "").toLowerCase().includes(lower)
+      );
+    }
+    if (typeFilter !== "all")
+      results = results.filter((b) => b.propertyType === typeFilter);
+    if (statusFilter !== "all")
+      results = results.filter((b) => b.constructionStatus === statusFilter);
+    setFilteredBuildings(results);
+  }, [searchTerm, typeFilter, statusFilter, buildings]);
+
+  if (openPlotsError) {
+    toast.error((openPlotsErr as any)?.message || "Failed to fetch open plots");
+    console.error(openPlotsErr);
+  }
+  if (openLandError) {
+    toast.error((openLandErr as any)?.message || "Failed to fetch open lands");
+    console.error(openLandErr);
+  }
+  if (buildError) {
+    toast.error((buildErr as any)?.message || "Failed to fetch buildings");
+    console.error(buildErr);
+  }
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setTypeFilter("all");
+    setStatusFilter("all");
+  };
+
+  const handleAddBuilding = () => {
+    setSelectedBuilding(null);
+    setDialogMode("add");
+    setBuildingDialogOpen(true);
+  };
+
+  const handleEditBuilding = (building: Building, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedBuilding(building);
+    setDialogMode("edit");
+    setBuildingDialogOpen(true);
+  };
+
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBuildingToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleEditOpenLand = (land: OpenLand, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentOpenLand(land);
+    setopenLandDialog(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!buildingToDelete) return;
+    deleteBuilding.mutate(buildingToDelete);
+    setBuildingToDelete(null);
+    setDeleteDialogOpen(false);
+  };
+
+  const handleSuccessfulSave = () => {
+    queryClient.invalidateQueries({ queryKey: ["buildings"] });
+  };
+
+  const handleOpenPlotSubmit = async (formData: any) => {
+    try {
+      setOpenPlotSubmitting(true);
+      if (currentOpenPlot && currentOpenPlot._id) {
+        await updateOpenPlotMutation.mutateAsync({
+          id: currentOpenPlot._id,
+          payload: formData,
+        });
+      } else {
+        await createOpenPlotMutation.mutateAsync(formData);
+      }
+      // react-query invalidation in mutation callbacks will refresh openPlotsData
+    } catch (err) {
+      console.error("handleOpenPlotSubmit error:", err);
+    } finally {
+      setOpenPlotSubmitting(false);
+    }
+  };
+
+  const handleOpenLandSubmit = async (formData: any) => {
+    try {
+      setOpenLandSubmitting(true);
+      if (currentOpenLand && currentOpenLand._id) {
+        await updateOpenLandMutation.mutateAsync({
+          id: currentOpenLand._id,
+          payload: formData,
+        });
+      } else {
+        await createOpenLandMutation.mutateAsync(formData);
+      }
+      // react-query invalidation in mutation callbacks will refresh openLandData
+    } catch (err) {
+      console.error("handleOpenLandSubmit error:", err);
+    } finally {
+      setOpenLandSubmitting(false);
+    }
+  };
+
+  const handleOpenLandDelete = async () => {
+    if (!selectedOpenLand) return;
+    setCurrentOpenLand(selectedOpenLand);
+    if (!window.confirm("Delete this open land?")) return;
+    await deleteOpenLandMutation.mutateAsync();
+    setSelectedOpenLand(null); // Go back to the list view
+  };
+
+  const handleOpenLandEdit = (land: OpenLand, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentOpenLand(land);
+    setopenLandDialog(true);
+  };
+
+  const handleAddOpenLand = () => {
+    setCurrentOpenLand(undefined);
+    setopenLandDialog(true);
+  };
+
+  const handleOpenLandBack = () => {
+    setSelectedOpenLand(null);
+  };
+
+  const handleEditOpenPlot = (plot: OpenPlot, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentOpenPlot(plot);
+    setDialogOpenPlot(true);
+  };
+
+  const handleDeleteOpenPlot = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentOpenPlot(openPlots.find((p) => p._id === id));
+    // confirm quickly
+    if (!window.confirm("Delete this open plot?")) return;
+    deleteOpenPlotMutation.mutate();
+  };
+
+  const handleDeleteOpenLand = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentOpenLand(openLandData.find((p) => p._id === id));
+    // confirm quickly
+    if (!window.confirm("Delete this open land?")) return;
+    deleteOpenLandMutation.mutate();
+  };
+
+  const handleDeleteOpenPlotFromDetails = async () => {
+    if (!selectedOpenPlot) return;
+    setCurrentOpenPlot(selectedOpenPlot);
+    if (!window.confirm("Delete this open plot?")) return;
+    await deleteOpenPlotMutation.mutateAsync();
+    setSelectedOpenPlot(null); // Go back to the list view
+  };
+
+  const handleDownload = async (
+    e: React.MouseEvent,
+    url?: string | null,
+    projectName?: string | null
+  ) => {
+    e.stopPropagation();
+    if (!url) return toast.error("No brochure available to download.");
+
+    try {
+      const API_BASE = import.meta.env.VITE_URL || "http://localhost:3000";
+      const proxyUrl = `${API_BASE}/api/download-proxy?url=${encodeURIComponent(
+        url
+      )}&filename=${encodeURIComponent(projectName || "brochure")}`;
+
+      // Open in new tab so browser handles download; the server streams the file
+      window.open(proxyUrl, "_blank");
+      toast.success("Download starting...");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Failed to download brochure.");
+    }
+  };
+
+  if (
+    buildingsLoading ||
+    openPlotsLoading ||
+    openLandLoading ||
+    isRolePermissionsLoading
+  ) {
+    return <Loader />;
+  }
+
+  const canEdit = userCanEditUser;
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        {selectedOpenPlot ? (
+          <OpenPlotDetails
+            plot={selectedOpenPlot}
+            onEdit={() => {
+              handleEditOpenPlot(selectedOpenPlot);
+            }}
+            onDelete={handleDeleteOpenPlotFromDetails}
+            onBack={() => setSelectedOpenPlot(null)}
+          />
+        ) : (
+          <>
+            {/* Header */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold flex items-center">
+                  <Building2 className="mr-2 h-7 w-7" />
+                  Properties
+                </h1>
+                <p className="text-muted-foreground">
+                  Manage buildings and view details
+                </p>
+              </div>
+
+              {canEdit && (
+                <div className="flex gap-3">
+                  <Button className="" onClick={handleAddOpenLand}>
+                    <Plus className="mr-2 h-4 w-4" /> Add Open Land
+                  </Button>
+
+                  <Button
+                    className="bg-estate-tomato hover:bg-estate-tomato/90"
+                    onClick={() => {
+                      setCurrentOpenPlot(undefined);
+                      setDialogOpenPlot(true);
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" /> Add Open Plot
+                  </Button>
+
+                  <Button onClick={handleAddBuilding}>
+                    <Plus className="mr-2 h-4 w-4" /> Add Property
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Filters + Buildings Grid */}
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name or location..."
+                      className="pl-8"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Apartment Complex">
+                        Apartment Complex
+                      </SelectItem>
+                      <SelectItem value="Villa Complex">
+                        Villa Complex
+                      </SelectItem>
+                      <SelectItem value="Plot Development">
+                        Plot Development
+                      </SelectItem>
+                      <SelectItem value="Land Parcel">Land Parcel</SelectItem>
+                      <SelectItem value="Open Plot">Open Plot</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="Under Construction">
+                        Under Construction
+                      </SelectItem>
+                      <SelectItem value="Planned">Planned</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {(searchTerm !== "" ||
+                    typeFilter !== "all" ||
+                    statusFilter !== "all") && (
+                    <Button variant="ghost" onClick={clearFilters}>
+                      <X className="mr-2 h-4 w-4" /> Clear
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                  {filteredBuildings.map((b, idx) => (
+                    <Card
+                      key={b._id || idx}
+                      className="overflow-hidden hover:shadow-lg transition cursor-pointer"
+                    >
+                      <div className="relative">
+                        {b.thumbnailUrl ? (
+                          <img
+                            src={b.thumbnailUrl}
+                            alt={b.projectName}
+                            className="h-48 w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-48 bg-muted flex items-center justify-center">
+                            <Building2 className="h-10 w-10 opacity-20" />
+                          </div>
+                        )}
+                        <div className="absolute top-3 right-3">
+                          {getStatusBadge(b.constructionStatus)}
+                        </div>
+                      </div>
+
+                      <CardContent className="p-4">
+                        <div className="flex justify-between items-start mb-1">
+                          <h3 className="font-semibold text-lg">
+                            {b.projectName}
+                          </h3>
+                          {canEdit && (
+                            <div
+                              className="flex gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(e) => handleEditBuilding(b, e)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(e) => handleDeleteClick(b._id!, e)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center text-sm text-muted-foreground mb-3">
+                          <MapPin className="h-4 w-4 mr-1" /> {b.location}
+                        </div>
+
+                        <div className="space-y-2 mb-4 text-sm">
+                          <div className="flex justify-between">
+                            <span>Total Units</span>
+                            <span>{b.totalUnits}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Available</span>
+                            <span className="text-green-600">
+                              {b.availableUnits}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Sold</span>
+                            <span className="text-blue-600">{b.soldUnits}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-t pt-3 text-sm space-y-2">
+                          <div className="flex justify-between">
+                            <span className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-1" /> Completion
+                            </span>
+                            <span>
+                              {new Date(b.completionDate).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Municipal</span>
+                            {b.municipalPermission ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <X className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
+
+                          {/* RERA Status */}
+                          <div className="flex justify-between mt-2">
+                            <span>RERA Approved</span>
+                            {b.reraApproved ? (
+                              <div className="flex items-center space-x-2">
+                                <Check className="h-4 w-4 text-green-500" />
+                                <span className="text-sm font-medium">
+                                  {b.reraNumber || "N/A"}
+                                </span>
+                              </div>
+                            ) : (
+                              <X className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 mt-4">
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={() =>
+                              navigate(`/properties/building/${b._id}`)
+                            }
+                          >
+                            View More
+                          </Button>
+                          {b.brochureUrl && (
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={(e) =>
+                                  handleDownload(
+                                    e,
+                                    b.brochureUrl!,
+                                    b.projectName
+                                  )
+                                }
+                                title="Download Brochure"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {/* <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={(e) =>
+                                  handleShare(e, b.brochureUrl!, b.projectName)
+                                }
+                                title="Copy Share Link"
+                              >
+                                <Share2 className="h-4 w-4" />
+                              </Button> */}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ---------- Open Plots Section ---------- */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-semibold">Open Plots</h2>
+                <div />
+              </div>
+
+              <Card>
+                <CardContent className="p-6">
+                  {openPlots.length === 0 ? (
+                    <div className="text-center py-12">
+                      <h3 className="text-lg font-semibold mb-2">
+                        No open plots found
+                      </h3>
+                      <p className="text-muted-foreground">
+                        Add open plots using the button above.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {openPlots.map((plot) => (
+                        <Card
+                          key={plot._id}
+                          onClick={() => setSelectedOpenPlot(plot)}
+                          className="overflow-hidden hover:shadow-lg transition cursor-pointer"
+                        >
+                          <div className="relative">
+                            {plot.thumbnailUrl ? (
+                              <img
+                                src={plot.thumbnailUrl}
+                                alt={plot.projectName}
+                                className="h-48 w-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-48 bg-muted flex items-center justify-center">
+                                <Building2 className="h-10 w-10 opacity-20" />
+                              </div>
+                            )}
+                          </div>
+
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-1">
+                              <h3 className="font-semibold text-lg">
+                                {plot.projectName} — {plot.plotNo}
+                              </h3>
+                              {canEdit && (
+                                <div
+                                  className="flex gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) => handleEditOpenPlot(plot, e)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={(e) =>
+                                      handleDeleteOpenPlot(plot._id!, e)
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center text-sm text-muted-foreground mb-3">
+                              <MapPin className="h-4 w-4 mr-1" />{" "}
+                              {plot.googleMapsLink ? (
+                                <a
+                                  className="underline"
+                                  href={plot.googleMapsLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  View on map
+                                </a>
+                              ) : (
+                                plot.projectName
+                              )}
+                            </div>
+
+                            <div className="space-y-2 mb-4 text-sm">
+                              <div className="flex justify-between">
+                                <span>Extent (SqYards)</span>
+                                <span>{plot.extentSqYards}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Price / SqYard</span>
+                                <span>₹{plot.pricePerSqYard}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Total Amount</span>
+                                <span>₹{plot.totalAmount}</span>
+                              </div>
+                            </div>
+
+                            <div className="border-t pt-3 text-sm space-y-2">
+                              <div className="flex justify-between">
+                                <span>Availability</span>
+                                <span>{plot.availabilityStatus}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Approval</span>
+                                <span>{plot.approval}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 mt-4">
+                              <Button
+                                size="sm"
+                                className="flex-1"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedOpenPlot(plot);
+                                }}
+                              >
+                                View Plot Details
+                              </Button>
+                              {plot.brochureUrl && (
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={(e) =>
+                                      handleDownload(
+                                        e,
+                                        plot.brochureUrl!,
+                                        plot.projectName
+                                      )
+                                    }
+                                    title="Download Brochure"
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                  {/* <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={(e) =>
+                                      handleShare(
+                                        e,
+                                        plot.brochureUrl!,
+                                        plot.projectName
+                                      )
+                                    }
+                                    title="Copy Share Link"
+                                  >
+                                    <Share2 className="h-4 w-4" />
+                                  </Button> */}
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+            {/* openland */}
+            <OpenLandProperties />
+          </>
+        )}
+      </div>
+
+      {/* Dialogs */}
+      <BuildingDialog
+        open={buildingDialogOpen}
+        onOpenChange={setBuildingDialogOpen}
+        building={selectedBuilding || undefined}
+        mode={dialogMode}
+        onSuccessfulSave={handleSuccessfulSave}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Building"
+        description="Are you sure you want to delete this building?"
+      />
+
+      {/* OpenPlot dialog (calls your existing component) */}
+      <OpenPlotDialog
+        open={dialogOpenPlot}
+        onOpenChange={(val: boolean) => {
+          setDialogOpenPlot(val);
+          if (!val) setCurrentOpenPlot(undefined);
+        }}
+        openPlot={currentOpenPlot}
+        onSubmit={handleOpenPlotSubmit}
+      />
+      {/* OpenLand dialog (calls your existing component) */}
+      <OpenLandDialog
+        open={openLandDialog}
+        onOpenChange={(val: boolean) => {
+          setopenLandDialog(val);
+          if (!val) setCurrentOpenLand(undefined);
+        }}
+        openLand={currentOpenLand}
+        onSubmit={handleOpenLandSubmit}
+      />
+    </MainLayout>
+  );
+};
+
+export default NewProperties;

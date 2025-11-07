@@ -1,0 +1,396 @@
+import PublicLayout from "@/components/layout/PublicLayout";
+import {
+  Construction,
+  Clock,
+  Shield,
+  Hammer,
+  DollarSign,
+  MapPin,
+  Calendar,
+} from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { motion } from "framer-motion";
+import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { useOngoingProperties } from "@/utils/public/Config";
+import { Building } from "@/types/building";
+import { Badge } from "@/components/ui/badge";
+
+const OngoingProjectsPage = () => {
+  const {
+    data: ongoingProperties,
+    isLoading: OngoingPropertiesLoading,
+    isError: OngoingPropertiesError,
+    error: OngoingPropertiesErr,
+    refetch,
+  } = useOngoingProperties();
+
+  if (OngoingPropertiesError) {
+    toast.error(OngoingPropertiesErr.message);
+    console.log("Ongoing properties error:", OngoingPropertiesErr);
+  }
+
+  const projectProgress = [
+    { name: "Sunrise Heights", progress: 75, expectedCompletion: "Dec 2024" },
+    {
+      name: "Tech Park Residency",
+      progress: 60,
+      expectedCompletion: "Jun 2025",
+    },
+    { name: "Royal Gardens", progress: 45, expectedCompletion: "Mar 2025" },
+  ];
+
+  // New, more vibrant colors for our design!
+  const vibrantColors = {
+    primary: "#6A5ACD", // SlateBlue
+    secondary: "#FFD700", // Gold
+    accent1: "#32CD32", // LimeGreen
+    accent2: "#FFA500", // Orange
+    backgroundLight: "#F0F8FF", // AliceBlue
+    backgroundDark: "#191970", // MidnightBlue
+  };
+
+  return (
+    <PublicLayout>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        {/* Header - Super Hero Style! */}
+        <section
+          className="relative py-36  overflow-hidden text-center "
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1582407947304-fd86f028f716?fm=jpg&q=60&w=3000&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8cmVhbCUyMGVzdGF0ZXxlbnwwfHwwfHx8MA%3D%3D')`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }}
+        >
+          <div className="absolute inset-0 bg-black bg-opacity-50 z-0" />
+          <div className="container mx-auto px-4 relative z-10">
+            <motion.h1
+              className="text-5xl md:text-7xl font-md font-vidaloka mb-6 py-10 tracking-tight leading-tight text-white drop-shadow-lg"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 100, damping: 10 }}
+            >
+              Awesome Ongoing Projects!
+            </motion.h1>
+            <motion.p
+              className="text-xl md:text-2xl text-yellow-200 max-w-3xl mx-auto italic"
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{
+                delay: 0.3,
+                type: "spring",
+                stiffness: 100,
+                damping: 10,
+              }}
+            >
+              Grab your dream home while it's still being built and lock in{" "}
+              <span className="font-bold underline">amazing deals</span>!
+            </motion.p>
+          </div>
+
+          {/* Fun little decorative shapes! */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full animate-pulse-slow"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full animate-pulse-slow delay-500"></div>
+        </section>
+
+        {/* Progress Tracking - See it Grow! */}
+        <section className="py-20 bg-white shadow-inner">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-md font-vidaloka mb-4 text-blue-700">
+                Building Dreams: Live Progress! 🏗️
+              </h2>
+              <p className="text-gray-700 text-lg max-w-2xl mx-auto">
+                Watch your future home come to life with our transparent
+                progress tracker!
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+              {projectProgress.map((project, index) => (
+                <motion.div
+                  key={index}
+                  className="bg-white p-8 rounded-2xl shadow-lg border-2 border-navy-200 cursor-pointer"
+                  whileHover={{
+                    scale: 1.03,
+                    borderColor: "#ffcc11",
+                  }}
+                  initial={{ y: 50, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{
+                    delay: index * 0.15,
+                    type: "spring",
+                    stiffness: 120,
+                  }}
+                >
+                  <h3 className="text-2xl font-md font-vidaloka mb-3 text-navy-900 text-center">
+                    {/* Use Gold for the icon */}
+                    <Hammer className="inline-block mr-2 text-estate-gold" />
+                    {project.name}
+                  </h3>
+                  <div className="mb-5">
+                    <div className="flex justify-between text-base font-semibold mb-2 text-gray-700">
+                      <span>Progress!</span>
+                      {/* Use Gold for the percentage highlight */}
+                      <span className="text-estate-gold">
+                        {project.progress}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={project.progress}
+                      // Use a light Navy for the track and ensure the filled part (via custom CSS) is Gold
+                      className="h-3 bg-navy-200 [&>div]:bg-estate-gold"
+                    />
+                  </div>
+                  <div className="text-base text-gray-600 font-medium text-center">
+                    {/* Use a muted Gold/Navy for the Clock icon */}
+                    <Clock className="inline h-5 w-5 mr-1 text-navy-500" />
+                    Ready by:{" "}
+                    <span className="font-semibold text-navy-700">
+                      {project.expectedCompletion}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Projects Grid - Your New Home Awaits! */}
+        <section className="py-20 bg-blue-50">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-md font-vidaloka mb-4 text-green-700">
+                🏡 Our Awesome Houses for You!
+              </h2>
+              <p className="text-gray-700 text-lg max-w-2xl mx-auto">
+                These homes are being built just for you! Get in early and
+                choose the best spot!
+              </p>
+            </div>
+
+            {OngoingPropertiesLoading ? (
+              <div className="text-center py-10">
+                <h1 className="text-lg text-gray-600 animate-pulse">
+                  Please wait...
+                </h1>
+              </div>
+            ) : OngoingPropertiesError ? (
+              <div className="text-center py-10">
+                <h1 className="text-lg text-red-500 mb-4">
+                  Something went wrong...
+                </h1>
+                <button
+                  onClick={() => refetch()}
+                  className="px-4 py-2 flex items-center justify-center gap-2 rounded bg-blue-600 hover:bg-blue-700 text-white transition"
+                >
+                  retry
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-10">
+                {ongoingProperties?.data?.map((project: Building, idx) => (
+                  <CardContainer key={project._id || idx} className="inter-var">
+                    <CardBody className="bg-white dark:bg-black border border-gray-200 dark:border-white/[0.1] rounded-2xl w-full sm:w-[22rem] md:w-[24rem] lg:w-[25rem] h-auto min-h-[28rem] sm:min-h-[30rem] md:min-h-[32rem] lg:min-h-[35rem] p-6 group/card shadow-xl flex flex-col justify-between relative">
+                      {/* Image */}
+                      <CardItem
+                        translateZ={80}
+                        className="w-full mt-1 rounded-xl overflow-hidden"
+                      >
+                        <img
+                          src={project?.thumbnailUrl}
+                          alt={project?.projectName}
+                          className="h-48 sm:h-52 md:h-56 lg:h-60 w-full object-cover rounded-xl transition-transform duration-500 ease-out group-hover/card:scale-105"
+                        />
+                      </CardItem>
+                      {/* Title */}
+                      <CardItem
+                        translateZ={30}
+                        className="text-lg mt-3 space-y-1 sm:text-xl font-md font-vidaloka text-neutral-900 dark:text-white "
+                      >
+                        {project?.projectName}
+                      </CardItem>
+                      {/* Location with Map */}
+                      <CardItem className="mt-2 flex flex-col text-xs sm:text-sm text-gray-600 dark:text-gray-300 w-70">
+                        <div className="flex items-center mb-1">
+                          {/* <MapPin className="h-4 w-4 mr-1" />
+                                             <span>{project.location}</span> */}
+                        </div>
+                        {/* Map */}
+                        {project.googleMapsLocation ? (
+                          <div className="w-full h-32 rounded-lg overflow-hidden">
+                            <iframe
+                              src={project?.googleMapsLocation}
+                              width="100%"
+                              height="100%"
+                              style={{ border: 0 }}
+                              allowFullScreen
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            ></iframe>
+                          </div>
+                        ) : (
+                          <div className="w-full h-32 rounded-lg bg-gray-100 flex items-center justify-center">
+                            <p className="text-gray-500 text-sm">
+                              No map available
+                            </p>
+                          </div>
+                        )}
+                      </CardItem>
+                      <CardItem translateZ={40} className="mt-4">
+                        <div className="flex items-center justify-between text-sm text-gray-600">
+                          {/* <div>
+                            <Calendar className="inline mr-1 h-4 w-4" />
+                            Launch: {project?.completionDate}
+                          </div> */}
+                          <div>
+                            <MapPin className="inline mr-1 h-4 w-4" />
+                            {project?.location}
+                          </div>
+                        </div>
+                      </CardItem>
+                      <CardItem translateZ={50} className="m-2">
+                        <Badge variant="outline" className="text-xs py-1 px-2">
+                          {project?.propertyType}
+                        </Badge>
+                      </CardItem>
+                      {/* Price
+                      <CardItem
+                        translateZ={30}
+                        className="text-base sm:text-lg font-bold text-indigo-700 mt-1"
+                      >
+                        ₹{project?.priceRange?.min} - ₹
+                        {project?.priceRange?.max}
+                        Lakhs onwards
+                      </CardItem> */}
+
+                      {/* Buttons */}
+                      <div className="mt-2 space-y-2">
+                        <Link to={`/public/project/${project._id}`}>
+                          <CardItem
+                            translateZ={40}
+                            as="button"
+                            className="w-full px-4 py-2 rounded-full text-xs sm:text-sm font-medium text-estate-navy/90 border border-estate-navy/80 hover:bg-estate-navy/30 transition-colors"
+                          >
+                            View Details
+                          </CardItem>
+                        </Link>
+
+                        <CardItem
+                          translateZ={40}
+                          as="button"
+                          className="w-full px-4 py-2 rounded-full text-xs sm:text-sm font-medium bg-estate-navy text-white hover:bg-estate-navy/90 transition-colors flex items-center justify-center"
+                        >
+                          Schedule Site Visit
+                          <Calendar className="ml-2 h-4 w-4" />
+                        </CardItem>
+                      </div>
+                    </CardBody>
+                  </CardContainer>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Benefits of Buying Ongoing Projects - Smart Choices! */}
+        <section className="py-20 bg-yellow-50">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-md font-vidaloka mb-4 text-orange-700">
+                💡 Why Buy Now? Super Smart Reasons!
+              </h2>
+              <p className="text-gray-700 text-lg max-w-2xl mx-auto">
+                Buying an ongoing project is like finding a secret treasure!
+                Here's why:
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+              <motion.div
+                className="bg-white p-8 rounded-2xl shadow-lg border-2 border-yellow-200 text-center cursor-pointer"
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
+                  backgroundColor: "#FFFACD",
+                }}
+                initial={{ rotateY: 90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+              >
+                <DollarSign className="h-14 w-14 mx-auto mb-4 text-green-600 animate-bounce-subtle" />
+                <h3 className="text-2xl font-bold mb-2 text-green-800">
+                  Save Money!
+                </h3>
+                <p className="text-gray-600 text-base">
+                  Get amazing early bird prices and flexible payment plans!
+                </p>
+              </motion.div>
+              <motion.div
+                className="bg-white p-8 rounded-2xl shadow-lg border-2 border-yellow-200 text-center cursor-pointer"
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
+                  backgroundColor: "#FFFACD",
+                }}
+                initial={{ rotateY: 90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+              >
+                <Construction className="h-14 w-14 mx-auto mb-4 text-blue-600 animate-spin-slow" />
+                <h3 className="text-2xl font-bold mb-2 text-blue-800">
+                  Your Way!
+                </h3>
+                <p className="text-gray-600 text-base">
+                  Pick your favorite colors and designs inside!
+                </p>
+              </motion.div>
+              <motion.div
+                className="bg-white p-8 rounded-2xl shadow-lg border-2 border-yellow-200 text-center cursor-pointer"
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
+                  backgroundColor: "#FFFACD",
+                }}
+                initial={{ rotateY: 90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+              >
+                <Clock className="h-14 w-14 mx-auto mb-4 text-purple-600 animate-pulse-fast" />
+                <h3 className="text-2xl font-bold mb-2 text-purple-800">
+                  Easy Payments!
+                </h3>
+                <p className="text-gray-600 text-base">
+                  Pay over time, as the building gets finished!
+                </p>
+              </motion.div>
+              <motion.div
+                className="bg-white p-8 rounded-2xl shadow-lg border-2 border-yellow-200 text-center cursor-pointer"
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
+                  backgroundColor: "#FFFACD",
+                }}
+                initial={{ rotateY: 90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.7 }}
+              >
+                <Shield className="h-14 w-14 mx-auto mb-4 text-orange-600 animate-wiggle" />
+                <h3 className="text-2xl font-bold mb-2 text-orange-800">
+                  Super Safe!
+                </h3>
+                <p className="text-gray-600 text-base">
+                  All projects are officially registered for your peace of mind!
+                </p>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </PublicLayout>
+  );
+};
+
+export default OngoingProjectsPage;
